@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Birdsense</string>
+    <string name="start_button_name">Start</string>
+    <string name="ip_address_label">&lt;IP Address&gt;</string>
+</resources>

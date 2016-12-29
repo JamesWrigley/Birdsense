@@ -50,8 +50,17 @@ class AccelerometerListener implements SensorEventListener {
             try {
                 s.getOutputStream().write(byteValues.array());
             } catch (IOException e) {
+                // Assume this means that the client has disconnected
                 Toast.makeText(parent, "IOException when writing to socket",
                                Toast.LENGTH_SHORT).show();
+                try {
+                    s.close();
+                } catch (IOException f) {
+                    Toast.makeText(parent, "IOException when closing socket",
+                                   Toast.LENGTH_SHORT).show();
+                }
+
+                clients.remove(s);
             }
         }
     }

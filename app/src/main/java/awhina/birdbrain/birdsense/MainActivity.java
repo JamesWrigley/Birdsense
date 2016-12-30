@@ -69,7 +69,8 @@ public class MainActivity extends AppCompatActivity {
 
             // Start streaming data
             listener.start();
-            sm.registerListener(listener, linearAccelerometer, (int)2e6);
+            sm.registerListener(listener, linearAccelerometer,
+                                SensorManager.SENSOR_DELAY_FASTEST);
         } else {
             listener.stop();
             sm.unregisterListener(listener);

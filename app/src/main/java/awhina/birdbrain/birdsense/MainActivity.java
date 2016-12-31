@@ -1,5 +1,6 @@
 package awhina.birdbrain.birdsense;
 
+import android.util.Log;
 import android.os.Bundle;
 import android.view.View;
 import android.graphics.Color;
@@ -20,6 +21,8 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 public class MainActivity extends AppCompatActivity {
+    public static final String LOG_TAG = "Birdview";
+
     SensorManager sm;
     Sensor linearAccelerometer;
     AccelerometerListener listener;
@@ -39,7 +42,7 @@ public class MainActivity extends AppCompatActivity {
             button.setEnabled(false);
             createErrorDialog("No accelerometer available, cannot start sensor service");
         } else {
-            listener = new AccelerometerListener(this);
+            listener = new AccelerometerListener();
         }
     }
 
@@ -71,9 +74,11 @@ public class MainActivity extends AppCompatActivity {
             listener.start();
             sm.registerListener(listener, linearAccelerometer,
                                 SensorManager.SENSOR_DELAY_FASTEST);
+            Log.i(LOG_TAG, "Streaming begun");
         } else {
             listener.stop();
             sm.unregisterListener(listener);
+            Log.i(LOG_TAG, "Streaming finished");
             ipTextview.setText(R.string.ip_address_label);
             ipTextview.setTextColor(Color.LTGRAY);
         }

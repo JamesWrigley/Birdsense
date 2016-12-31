@@ -21,11 +21,11 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 public class MainActivity extends AppCompatActivity {
-    public static final String LOG_TAG = "Birdview";
+    static final String LOG_TAG = "Birdview";
 
-    SensorManager sm;
-    Sensor linearAccelerometer;
-    AccelerometerListener listener;
+    private SensorManager sm;
+    private Sensor linearAccelerometer;
+    private AccelerometerListener listener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

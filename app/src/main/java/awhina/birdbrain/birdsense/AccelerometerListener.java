@@ -15,7 +15,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 class AccelerometerListener implements SensorEventListener {
     private final int PORT = 1998;
     private final int ACCEPT_TIMEOUT = 100; // A tenth of a second
-    private final int SENSOR_ARRAY_SIZE = (3 * Float.SIZE) / Byte.SIZE;
 
     private boolean streaming;
     private ServerSocket serverSocket;
@@ -28,7 +27,6 @@ class AccelerometerListener implements SensorEventListener {
         try {
             serverSocket = new ServerSocket(PORT);
             serverSocket.setSoTimeout(ACCEPT_TIMEOUT);
-            serverSocket.setReceiveBufferSize(SENSOR_ARRAY_SIZE);
         } catch (IOException e) {
             Log.e(MainActivity.LOG_TAG, "IOException when creating socket: " + e.getMessage());
         }
@@ -39,7 +37,7 @@ class AccelerometerListener implements SensorEventListener {
     public void onSensorChanged(SensorEvent event) {
         Log.d(MainActivity.LOG_TAG, "SensorChanged: " + Float.toString(event.values[0]));
         for (Socket s : clients) {
-            ByteBuffer byteValues = ByteBuffer.allocate(SENSOR_ARRAY_SIZE);
+            ByteBuffer byteValues = ByteBuffer.allocate(3 * Float.SIZE);
             byteValues.putFloat(event.values[0]);
             byteValues.putFloat(event.values[1]);
             byteValues.putFloat(event.values[2]);

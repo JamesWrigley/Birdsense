@@ -37,10 +37,12 @@ class AccelerometerListener implements SensorEventListener {
     public void onSensorChanged(SensorEvent event) {
         Log.d(MainActivity.LOG_TAG, "SensorChanged: " + Float.toString(event.values[0]));
         for (Socket s : clients) {
-            ByteBuffer byteValues = ByteBuffer.allocate(3 * Float.SIZE);
+            // We need space for three 32 bit (4 byte) floats, and one 64 bit (8 byte) long
+            ByteBuffer byteValues = ByteBuffer.allocate(3 * 4 + 8);
             byteValues.putFloat(event.values[0]);
             byteValues.putFloat(event.values[1]);
             byteValues.putFloat(event.values[2]);
+            byteValues.putLong(event.timestamp);
 
             try {
                 s.getOutputStream().write(byteValues.array());

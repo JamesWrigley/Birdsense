@@ -1,28 +1,36 @@
 package awhina.birdbrain.birdsense;
 
+import android.os.Build;
 import android.util.Log;
+import android.os.SystemClock;
 import android.hardware.Sensor;
+import android.annotation.TargetApi;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 
 import java.net.Socket;
+import java.util.HashMap;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.net.ServerSocket;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.net.SocketTimeoutException;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 class AccelerometerListener implements SensorEventListener {
     private final int PORT = 1998;
     private final int ACCEPT_TIMEOUT = 100; // A tenth of a second
 
     private boolean streaming;
+    private boolean nanosecondAccuracy;
     private ServerSocket serverSocket;
-    private CopyOnWriteArrayList<Socket> clients;
+    // A map of clients and their connection times
+    private HashMap<Socket, Long> clients;
 
     AccelerometerListener() {
         streaming = false;
-        clients = new CopyOnWriteArrayList<>();
+        clients = new HashMap<>();
+        nanosecondAccuracy = Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1;
 
         try {
             serverSocket = new ServerSocket(PORT);
@@ -36,28 +44,31 @@ class AccelerometerListener implements SensorEventListener {
 
     public void onSensorChanged(SensorEvent event) {
         Log.d(MainActivity.LOG_TAG, "SensorChanged: " + Float.toString(event.values[0]));
-        for (Socket s : clients) {
-            // We need space for three 32 bit (4 byte) floats, and one 64 bit (8 byte) long
-            ByteBuffer byteValues = ByteBuffer.allocate(3 * 4 + 8);
+        for (Map.Entry<Socket, Long> entry : clients.entrySet()) {
+            Socket client = entry.getKey();
+            Long connectTime = entry.getValue();
+
+            // We need space for four 32 bit (4 byte) floats
+            ByteBuffer byteValues = ByteBuffer.allocate(4 * 4);
             byteValues.putFloat(event.values[0]);
             byteValues.putFloat(event.values[1]);
             byteValues.putFloat(event.values[2]);
-            byteValues.putLong(event.timestamp);
+            byteValues.putFloat(calculateTimestamp(event.timestamp, connectTime));
 
             try {
-                s.getOutputStream().write(byteValues.array());
+                client.getOutputStream().write(byteValues.array());
             } catch (IOException e) {
                 // Assume this means that the client has disconnected
                 Log.e(MainActivity.LOG_TAG,
                       "Socket disconnected: IOException when writing to socket");
                 try {
-                    s.close();
+                    client.close();
                 } catch (IOException f) {
                     Log.e(MainActivity.LOG_TAG,
                           "Socket disconnected: IOException when closing socket");
                 }
 
-                clients.remove(s);
+                clients.remove(client);
             }
         }
     }
@@ -66,7 +77,7 @@ class AccelerometerListener implements SensorEventListener {
         while (streaming) {
             try {
                 Socket client = serverSocket.accept();
-                clients.add(client);
+                clients.put(client, getTime());
                 Log.i(MainActivity.LOG_TAG,
                       "Socket accepted: " + client.getInetAddress().getHostAddress());
             } catch (SocketTimeoutException e) {
@@ -78,6 +89,26 @@ class AccelerometerListener implements SensorEventListener {
                       "IOException when accepting connection: " + e.getMessage());
             }
         }
+    }
+
+    @TargetApi(17)
+    private long getTime() {
+        return nanosecondAccuracy ? SystemClock.elapsedRealtimeNanos() : SystemClock.elapsedRealtime();
+    }
+
+    private float calculateTimestamp(long timestampNanos, long connectTime) {
+        float timestampSecs;
+
+        if (nanosecondAccuracy) {
+            long timestampDifferenceNanos = timestampNanos - connectTime;
+            timestampSecs = timestampDifferenceNanos / 1e9f;
+        } else { // If the accuracy is milliseconds
+            long eventTimestampMillis = TimeUnit.MILLISECONDS.convert(timestampNanos, TimeUnit.NANOSECONDS);
+            long timestampDifferenceMillis = eventTimestampMillis - connectTime;
+            timestampSecs = timestampDifferenceMillis / 1e3f;
+        }
+
+        return timestampSecs;
     }
 
     void start() {
@@ -92,7 +123,7 @@ class AccelerometerListener implements SensorEventListener {
 
     void stop() {
         streaming = false;
-        for (Socket client : clients) {
+        for (Socket client : clients.keySet()) {
             try {
                 client.close();
             } catch (IOException e) {

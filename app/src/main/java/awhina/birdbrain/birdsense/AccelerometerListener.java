@@ -125,9 +125,8 @@ class AccelerometerListener implements SensorEventListener {
             long timestampDifferenceNanos = timestampNanos - connectTime;
             timestampSecs = timestampDifferenceNanos / 1e9f;
         } else { // If the accuracy is milliseconds
-            long eventTimestampMillis = TimeUnit.MILLISECONDS.convert(timestampNanos, TimeUnit.NANOSECONDS);
-            long timestampDifferenceMillis = eventTimestampMillis - connectTime;
-            timestampSecs = timestampDifferenceMillis / 1e3f;
+            float eventTimestampSecs = (float)timestampNanos / 1e9f;
+            timestampSecs = eventTimestampSecs - ((float)connectTime / 1e3f);
         }
 
         return timestampSecs;

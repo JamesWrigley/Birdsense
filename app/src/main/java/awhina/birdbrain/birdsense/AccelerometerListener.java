@@ -2,6 +2,8 @@ package awhina.birdbrain.birdsense;
 
 import android.os.Build;
 import android.util.Log;
+import android.util.Pair;
+import android.os.AsyncTask;
 import android.os.SystemClock;
 import android.hardware.Sensor;
 import android.annotation.TargetApi;
@@ -13,8 +15,8 @@ import java.util.HashMap;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.net.ServerSocket;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.SocketTimeoutException;
 
 class AccelerometerListener implements SensorEventListener {
@@ -25,7 +27,7 @@ class AccelerometerListener implements SensorEventListener {
     private boolean nanosecondAccuracy;
     private ServerSocket serverSocket;
     // A map of clients and their connection times
-    private HashMap<Socket, Long> clients;
+    private HashMap<Socket, Pair<DatagramSocket, Long>> clients;
 
     AccelerometerListener() {
         streaming = false;
@@ -40,13 +42,14 @@ class AccelerometerListener implements SensorEventListener {
         }
     }
 
-    public void onAccuracyChanged(Sensor sensor, int accuracy) { }
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+    }
 
     public void onSensorChanged(SensorEvent event) {
         Log.d(MainActivity.LOG_TAG, "SensorChanged: " + Float.toString(event.values[0]));
-        for (Map.Entry<Socket, Long> entry : clients.entrySet()) {
-            Socket client = entry.getKey();
-            Long connectTime = entry.getValue();
+        for (final Socket client : clients.keySet()) {
+            final DatagramSocket udpSocket = clients.get(client).first;
+            Long connectTime = clients.get(client).second;
 
             // We need space for four 32 bit (4 byte) floats
             ByteBuffer byteValues = ByteBuffer.allocate(4 * 4);
@@ -55,38 +58,57 @@ class AccelerometerListener implements SensorEventListener {
             byteValues.putFloat(event.values[2]);
             byteValues.putFloat(calculateTimestamp(event.timestamp, connectTime));
 
-            try {
-                client.getOutputStream().write(byteValues.array());
-            } catch (IOException e) {
-                // Assume this means that the client has disconnected
-                Log.e(MainActivity.LOG_TAG,
-                      "Socket disconnected: IOException when writing to socket");
-                try {
-                    client.close();
-                } catch (IOException f) {
-                    Log.e(MainActivity.LOG_TAG,
-                          "Socket disconnected: IOException when closing socket");
-                }
+            AsyncTask<ByteBuffer, Void, Void> networkWriteAsyncTask = new AsyncTask<ByteBuffer, Void, Void>() {
+                @Override
+                protected Void doInBackground(ByteBuffer... params) {
+                    try {
+                        ByteBuffer values = params[0];
+                        client.getOutputStream().write(values.array());
+                        DatagramPacket packet = new DatagramPacket(values.array(),
+                                                                   values.capacity(),
+                                                                   client.getInetAddress(),
+                                                                   PORT);
+                        udpSocket.send(packet);
+                    } catch (IOException e) {
+                        // Assume this means that the client has disconnected
+                        Log.e(MainActivity.LOG_TAG,
+                                "Socket disconnected: " + e.getMessage());
+                        try {
+                            client.close();
+                            udpSocket.close();
+                        } catch (IOException f) {
+                            Log.e(MainActivity.LOG_TAG,
+                                  "Socket disconnected: IOException when closing socket");
+                        }
 
-                clients.remove(client);
-            }
+                        clients.remove(client);
+                    }
+
+                    return null;
+                }
+            };
+
+            networkWriteAsyncTask.execute(byteValues);
         }
     }
 
     private void accepter() {
         while (streaming) {
             try {
+                DatagramSocket udpSocket = new DatagramSocket();
                 Socket client = serverSocket.accept();
-                clients.put(client, getTime());
+                //udpSocket.connect(client.getInetAddress(), (int)5e4);
+
+                clients.put(client, Pair.create(udpSocket, getTime()));
                 Log.i(MainActivity.LOG_TAG,
-                      "Socket accepted: " + client.getInetAddress().getHostAddress());
+                        "Socket accepted: " + client.getInetAddress().getHostAddress());
             } catch (SocketTimeoutException e) {
                 // This will happen periodically so that the loop condition
                 // is regularly reevaluated.
                 continue;
             } catch (IOException e) {
                 Log.e(MainActivity.LOG_TAG,
-                      "IOException when accepting connection: " + e.getMessage());
+                        "IOException when accepting connection: " + e.getMessage());
             }
         }
     }
